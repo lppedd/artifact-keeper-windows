@@ -1,5 +1,7 @@
 # Artifact Keeper Windows Installer
 
+> **Beta:** Windows support is currently in beta. Please report issues on [GitHub](https://github.com/artifact-keeper/artifact-keeper/issues).
+
 WiX-based MSI installer for deploying Artifact Keeper as a Windows Service on Windows Server.
 
 ## What the installer does
