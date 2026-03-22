@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <Package Name="Artifact Keeper"
+           Manufacturer="Artifact Keeper"
+           Version="$(var.Version)"
+           UpgradeCode="7B2E4F5A-9C1D-4E3F-A8B6-2D7C5E9F1A3B">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Artifact Keeper is already installed."
+                  AllowSameVersionUpgrades="yes"
+                  Schedule="afterInstallValidate" />
+
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <!-- Properties for silent install -->
+    <Property Id="DB_HOST" Value="localhost" />
+    <Property Id="DB_PORT" Value="5432" />
+    <Property Id="DB_NAME" Value="artifact_registry" />
+    <Property Id="DB_USER" Value="registry" />
+    <Property Id="DB_PASSWORD" Hidden="yes" />
+    <Property Id="JWT_SECRET" Hidden="yes" />
+    <Property Id="BIND_ADDRESS" Value="0.0.0.0:8080" />
+    <Property Id="STORAGE_PATH" Value="C:\ProgramData\ArtifactKeeper\artifacts" />
+    <Property Id="MEILISEARCH_URL" />
+
+    <Property Id="MsiHiddenProperties" Value="DB_PASSWORD;JWT_SECRET" />
+
+    <!-- Installation directory structure -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="ArtifactKeeper">
+        <Component Id="cmp_MainBinary" Guid="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">
+          <File Id="fil_ArtifactKeeper" Source="$(var.BinaryPath)" KeyPath="yes" />
+        </Component>
+        <Component Id="cmp_EnvTemplate" Guid="B2C3D4E5-F6A7-8901-BCDE-F12345678901">
+          <File Id="fil_EnvTemplate" Source="config\env.template" KeyPath="yes" />
+        </Component>
+        <Component Id="cmp_License" Guid="C3D4E5F6-A7B8-9012-CDEF-123456789012">
+          <File Id="fil_License" Source="LICENSE" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Data directory -->
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="DATAFOLDER" Name="ArtifactKeeper">
+        <Directory Id="dir_Config" Name="config">
+          <Component Id="cmp_ConfigDir" Guid="D4E5F6A7-B8C9-0123-DEFA-234567890123">
+            <CreateFolder />
+          </Component>
+        </Directory>
+        <Directory Id="dir_Artifacts" Name="artifacts">
+          <Component Id="cmp_ArtifactsDir" Guid="E5F6A7B8-C9D0-1234-EFAB-345678901234">
+            <CreateFolder />
+          </Component>
+        </Directory>
+        <Directory Id="dir_Logs" Name="logs">
+          <Component Id="cmp_LogsDir" Guid="F6A7B8C9-D0E1-2345-FABC-456789012345">
+            <CreateFolder />
+          </Component>
+        </Directory>
+        <Directory Id="dir_Plugins" Name="plugins">
+          <Component Id="cmp_PluginsDir" Guid="A7B8C9D0-E1F2-3456-ABCD-567890123456">
+            <CreateFolder />
+          </Component>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Windows Service -->
+    <ComponentGroup Id="ServiceComponents" Directory="INSTALLFOLDER">
+      <Component Id="cmp_Service" Guid="B8C9D0E1-F2A3-4567-BCDE-678901234567">
+        <RegistryValue Root="HKLM" Key="SOFTWARE\ArtifactKeeper"
+                       Name="Installed" Type="integer" Value="1" KeyPath="yes" />
+
+        <ServiceInstall Id="ArtifactKeeperService"
+                        Name="ArtifactKeeper"
+                        DisplayName="Artifact Keeper"
+                        Description="Enterprise artifact registry supporting 45+ package formats"
+                        Type="ownProcess"
+                        Start="auto"
+                        ErrorControl="normal"
+                        Arguments="--service"
+                        Vital="yes" />
+
+        <ServiceControl Id="StartArtifactKeeper"
+                        Name="ArtifactKeeper"
+                        Start="install"
+                        Stop="both"
+                        Remove="uninstall"
+                        Wait="yes" />
+
+        <!-- Environment variable for config path -->
+        <Environment Id="env_AkEnvFile"
+                     Name="AK_ENV_FILE"
+                     Value="[DATAFOLDER]config\.env"
+                     Action="set"
+                     System="yes"
+                     Part="all" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Feature tree -->
+    <Feature Id="Complete" Title="Artifact Keeper" Level="1">
+      <Feature Id="Core" Title="Core Files" Level="1">
+        <ComponentRef Id="cmp_MainBinary" />
+        <ComponentRef Id="cmp_EnvTemplate" />
+        <ComponentRef Id="cmp_License" />
+      </Feature>
+      <Feature Id="DataDirs" Title="Data Directories" Level="1">
+        <ComponentRef Id="cmp_ConfigDir" />
+        <ComponentRef Id="cmp_ArtifactsDir" />
+        <ComponentRef Id="cmp_LogsDir" />
+        <ComponentRef Id="cmp_PluginsDir" />
+      </Feature>
+      <Feature Id="WindowsService" Title="Windows Service" Level="1">
+        <ComponentGroupRef Id="ServiceComponents" />
+      </Feature>
+    </Feature>
+
+  </Package>
+</Wix>

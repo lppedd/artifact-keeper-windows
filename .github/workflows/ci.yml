@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install WiX Toolset
+        run: dotnet tool install --global wix
+
+      - name: Validate WiX source
+        run: |
+          # Create a dummy binary for validation
+          New-Item -ItemType File -Path artifact-keeper.exe -Force
+          wix build src/wix/Product.wxs -d Version=0.0.1 -d BinaryPath=artifact-keeper.exe -o test.msi
+
+      - name: Lint PowerShell scripts
+        run: |
+          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
+          Invoke-ScriptAnalyzer -Path scripts/ -Recurse -ExcludeRule PSAvoidUsingWriteHost
