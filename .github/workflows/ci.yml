@@ -7,21 +7,26 @@ on:
     branches: [main]
 
 jobs:
-  validate:
+  lint:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install WiX Toolset
-        run: dotnet tool install --global wix
-
-      - name: Validate WiX source
-        run: |
-          # Create a dummy binary for validation
-          New-Item -ItemType File -Path artifact-keeper.exe -Force
-          wix build src/wix/Product.wxs -d Version=0.0.1 -d BinaryPath=artifact-keeper.exe -o test.msi
-
-      - name: Lint PowerShell scripts
+      - name: Lint PowerShell
         run: |
           Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
-          Invoke-ScriptAnalyzer -Path scripts/ -Recurse -ExcludeRule PSAvoidUsingWriteHost
+          $results = Invoke-ScriptAnalyzer -Path . -Recurse -ExcludeRule PSAvoidUsingWriteHost
+          $results | Format-Table -AutoSize
+          if ($results | Where-Object Severity -eq 'Error') {
+            Write-Error "PSScriptAnalyzer found errors"
+            exit 1
+          }
+
+  test-setup:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test check mode (no install)
+        run: |
+          .\check.ps1 -InstallDir "C:\ArtifactKeeper"

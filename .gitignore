@@ -1,8 +1,5 @@
+*.log
 *.msi
-*.wixobj
-*.wixpdb
-artifact-keeper.exe
-target/
-bin/
-obj/
-.vs/
+*.exe
+!setup.ps1
+!check.ps1
