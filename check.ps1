@@ -12,6 +12,25 @@
     Root directory for the Artifact Keeper installation.
     Defaults to C:\ArtifactKeeper.
 
+.PARAMETER ApiPort
+    Backend API port. Defaults to 8080.
+
+.PARAMETER WebPort
+    Web frontend port. Defaults to 3000.
+
+.PARAMETER PostgresPort
+    PostgreSQL port. Defaults to 5432.
+
+.PARAMETER MeilisearchPort
+    Meilisearch port. Defaults to 7700.
+
+.PARAMETER TrivyPort
+    Trivy port. Defaults to 8090.
+
+.PARAMETER PostgresVersion
+    PostgreSQL major version. Used to match the versioned service name
+    (e.g., ArtifactKeeperPostgreSQLv17). Defaults to "17".
+
 .EXAMPLE
     .\check.ps1
 
@@ -20,7 +39,13 @@
 #>
 
 param(
-    [string]$InstallDir = "C:\ArtifactKeeper"
+    [string]$InstallDir = "C:\ArtifactKeeper",
+    [int]$ApiPort = 8080,
+    [int]$WebPort = 3000,
+    [int]$PostgresPort = 5432,
+    [int]$MeilisearchPort = 7700,
+    [int]$TrivyPort = 8090,
+    [string]$PostgresVersion = "17"
 )
 
 Set-StrictMode -Version Latest
@@ -32,9 +57,9 @@ $ErrorActionPreference = "SilentlyContinue"
 
 $ServiceNames = @{
     Backend     = "ArtifactKeeper"
-    PostgreSQL  = "PostgreSQL"
-    Meilisearch = "Meilisearch"
-    Trivy       = "Trivy"
+    PostgreSQL  = "ArtifactKeeperPostgreSQLv$PostgresVersion"
+    Meilisearch = "ArtifactKeeperMeilisearch"
+    Trivy       = "ArtifactKeeperTrivy"
     Frontend    = "ArtifactKeeperWeb"
 }
 
@@ -106,7 +131,7 @@ $components = @(
         Name    = "Backend"
         Exe     = "bin\artifact-keeper.exe"
         Service = $ServiceNames.Backend
-        Health  = "http://localhost:8080/health"
+        Health  = "http://localhost:${ApiPort}/health"
     }
     @{
         Name    = "PostgreSQL"
@@ -118,7 +143,7 @@ $components = @(
         Name    = "Meilisearch"
         Exe     = "meilisearch\meilisearch.exe"
         Service = $ServiceNames.Meilisearch
-        Health  = "http://localhost:7700/health"
+        Health  = "http://localhost:${MeilisearchPort}/health"
     }
     @{
         Name    = "Trivy"
@@ -136,7 +161,7 @@ $components = @(
         Name    = "Frontend"
         Exe     = "web\server.js"
         Service = $ServiceNames.Frontend
-        Health  = "http://localhost:3000"
+        Health  = "http://localhost:${WebPort}"
     }
 )
 

@@ -17,8 +17,9 @@
     C:\ArtifactKeeper\data.
 
 .PARAMETER Components
-    Components to install. Use "all" for everything, or pick from: backend,
-    postgresql, meilisearch, trivy, frontend, check, uninstall.
+    Components to install. Use "all" for core components (backend, postgresql,
+    meilisearch, frontend), or pick individually. Trivy must be explicitly
+    included: -Components all,trivy or -Components backend,trivy,...
 
 .PARAMETER Unattended
     Skip interactive prompts. Requires -DbPassword when installing PostgreSQL.
@@ -36,7 +37,11 @@
 
 .EXAMPLE
     .\setup.ps1 -Components all -Unattended -DbPassword "s3cure"
-    Unattended install of all components.
+    Unattended install of core components (backend, PostgreSQL, Meilisearch, frontend).
+
+.EXAMPLE
+    .\setup.ps1 -Components all,trivy -Unattended -DbPassword "s3cure"
+    Unattended install of all components including Trivy.
 
 .EXAMPLE
     .\setup.ps1 -Check
@@ -52,12 +57,15 @@ param(
     [string]$PostgresVersion = "17",
     [string]$MeilisearchVersion = "latest",
     [string]$TrivyVersion = "latest",
-    [string]$NodeVersion = "22.16.0",
+    [string]$NodeVersion = "latest",
     [string]$WinswVersion = "2.12.0",
     [string]$DbPassword,
     [string]$JwtSecret,
     [int]$ApiPort = 8080,
     [int]$WebPort = 3000,
+    [int]$PostgresPort = 5432,
+    [int]$MeilisearchPort = 7700,
+    [int]$TrivyPort = 8090,
     [switch]$Unattended,
     [switch]$Check,
     [switch]$Upgrade
@@ -75,9 +83,9 @@ $LogFile = Join-Path $InstallDir "setup.log"
 
 $ServiceNames = @{
     Backend      = "ArtifactKeeper"
-    PostgreSQL   = "PostgreSQL"
-    Meilisearch  = "Meilisearch"
-    Trivy        = "Trivy"
+    PostgreSQL   = "ArtifactKeeperPostgreSQLv$PostgresVersion"
+    Meilisearch  = "ArtifactKeeperMeilisearch"
+    Trivy        = "ArtifactKeeperTrivy"
     Frontend     = "ArtifactKeeperWeb"
 }
 
@@ -166,6 +174,27 @@ function Get-LatestGitHubRelease {
         Write-Log "Failed to query GitHub API for $Repo : $_" "ERROR"
         return $null
     }
+}
+
+function Get-LatestNodeLtsVersion {
+    param([string]$Major = "22")
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $ProgressPreference = "SilentlyContinue"
+        $releases = Invoke-RestMethod "https://nodejs.org/dist/index.json"
+        $latest = $releases | Where-Object { $_.version -match "^v$Major\." -and $_.lts } |
+            Select-Object -First 1
+        if ($latest) {
+            $version = $latest.version.TrimStart("v")
+            Write-Log "Latest Node.js $Major LTS: v$version"
+            return $version
+        }
+        Write-Log "No LTS release found for Node.js $Major" "WARN"
+    }
+    catch {
+        Write-Log "Failed to query Node.js releases: $_" "WARN"
+    }
+    return $null
 }
 
 function New-SecureRandomString {
@@ -333,7 +362,7 @@ function Install-PostgreSQL {
     $existing = Get-Service -Name $ServiceNames.PostgreSQL -ErrorAction SilentlyContinue
     if (-not $existing) {
         Write-Log "Registering PostgreSQL service"
-        & $pgCtl register -N $ServiceNames.PostgreSQL -D $pgDataDir 2>&1 |
+        & $pgCtl register -N $ServiceNames.PostgreSQL -D $pgDataDir -o "-p $PostgresPort" 2>&1 |
             ForEach-Object { Write-Log $_ }
     }
 
@@ -359,13 +388,13 @@ function Install-PostgreSQL {
     $env:PGPASSWORD = $dbPass
 
     Write-Log "Creating database user 'registry' and database 'artifact_registry'"
-    & $psql -h localhost -U postgres -c "DO `$`$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'registry') THEN CREATE ROLE registry WITH LOGIN PASSWORD '$dbPass'; END IF; END `$`$;" 2>&1 |
+    & $psql -h localhost -p $PostgresPort -U postgres -c "DO `$`$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'registry') THEN CREATE ROLE registry WITH LOGIN PASSWORD '$dbPass'; END IF; END `$`$;" 2>&1 |
         ForEach-Object { Write-Log $_ }
 
-    & $psql -h localhost -U postgres -c "SELECT 1 FROM pg_database WHERE datname = 'artifact_registry'" -t 2>&1 |
+    & $psql -h localhost -p $PostgresPort -U postgres -c "SELECT 1 FROM pg_database WHERE datname = 'artifact_registry'" -t 2>&1 |
         ForEach-Object {
             if ($_.Trim() -ne "1") {
-                & $psql -h localhost -U postgres -c "CREATE DATABASE artifact_registry OWNER registry;" 2>&1 |
+                & $psql -h localhost -p $PostgresPort -U postgres -c "CREATE DATABASE artifact_registry OWNER registry;" 2>&1 |
                     ForEach-Object { Write-Log $_ }
             }
         }
@@ -408,7 +437,7 @@ function Install-Meilisearch {
   <name>Meilisearch</name>
   <description>Meilisearch search engine for Artifact Keeper</description>
   <executable>$exePath</executable>
-  <arguments>--db-path "$meiliDataDir" --master-key "$masterKey" --http-addr 127.0.0.1:7700</arguments>
+  <arguments>--db-path "$meiliDataDir" --master-key "$masterKey" --http-addr 127.0.0.1:$MeilisearchPort</arguments>
   <log mode="roll-by-size">
     <logpath>$logDir</logpath>
     <sizeThreshold>10240</sizeThreshold>
@@ -458,7 +487,7 @@ function Install-Trivy {
   <name>Trivy</name>
   <description>Trivy vulnerability scanner for Artifact Keeper</description>
   <executable>$exePath</executable>
-  <arguments>server --listen 0.0.0.0:8090 --cache-dir "$cacheDir"</arguments>
+  <arguments>server --listen 127.0.0.1:$TrivyPort --cache-dir "$cacheDir"</arguments>
   <log mode="roll-by-size">
     <logpath>$logDir</logpath>
     <sizeThreshold>10240</sizeThreshold>
@@ -481,11 +510,21 @@ function Install-Frontend {
     if (-not (Install-WinSW)) { return $false }
 
     # -- Node.js --
+    $nodeVer = $NodeVersion
+    if ($nodeVer -eq "latest") {
+        $resolved = Get-LatestNodeLtsVersion -Major "22"
+        if ($resolved) { $nodeVer = $resolved }
+        else {
+            $nodeVer = "22.16.0"
+            Write-Log "Could not resolve latest Node.js LTS, using fallback v$nodeVer" "WARN"
+        }
+    }
+
     $nodeDir = Join-Path $InstallDir "nodejs"
     $nodeExe = Join-Path $nodeDir "node.exe"
     if (-not (Test-Path $nodeExe)) {
         $nodeZip = Join-Path $InstallDir "node.zip"
-        $url = "https://nodejs.org/dist/v$NodeVersion/node-v$NodeVersion-win-x64.zip"
+        $url = "https://nodejs.org/dist/v$nodeVer/node-v$nodeVer-win-x64.zip"
         $ok = Invoke-DownloadWithRetry -Uri $url -OutFile $nodeZip
         if (-not $ok) { return $false }
 
@@ -500,7 +539,7 @@ function Install-Frontend {
         }
         Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
         Remove-Item $nodeZip -Force
-        Write-Log "Node.js v$NodeVersion installed" "OK"
+        Write-Log "Node.js v$nodeVer installed" "OK"
     } else {
         Write-Log "Node.js already present at $nodeExe"
     }
@@ -563,7 +602,7 @@ function Write-EnvConfig {
     $envFile = Join-Path $DataDir "config\.env"
 
     $dbPassword = if ($script:ResolvedDbPassword) { $script:ResolvedDbPassword } elseif ($DbPassword) { $DbPassword } else { "changeme" }
-    $dbUrl = "postgresql://registry:${dbPassword}@localhost:5432/artifact_registry"
+    $dbUrl = "postgresql://registry:${dbPassword}@localhost:${PostgresPort}/artifact_registry"
 
     $jwtValue = if ($JwtSecret) { $JwtSecret } else { New-SecureRandomString -ByteCount 48 }
 
@@ -584,13 +623,13 @@ function Write-EnvConfig {
     if ($MeilisearchLocal) {
         $key = if ($script:MeilisearchMasterKey) { $script:MeilisearchMasterKey } else { "" }
         $lines += ""
-        $lines += "MEILISEARCH_URL=http://localhost:7700"
+        $lines += "MEILISEARCH_URL=http://localhost:$MeilisearchPort"
         if ($key) { $lines += "MEILISEARCH_API_KEY=$key" }
     }
 
     if ($TrivyLocal) {
         $lines += ""
-        $lines += "TRIVY_URL=http://localhost:8090"
+        $lines += "TRIVY_URL=http://localhost:$TrivyPort"
     }
 
     $lines -join "`r`n" | Set-Content -Path $envFile -Encoding UTF8
@@ -637,10 +676,10 @@ function Start-AllServices {
                 }
                 $s = Get-Service -Name $svc
                 $port = switch ($svc) {
-                    $ServiceNames.PostgreSQL  { "5432" }
+                    $ServiceNames.PostgreSQL  { "$PostgresPort" }
                     $ServiceNames.Backend     { "$ApiPort" }
-                    $ServiceNames.Meilisearch { "7700" }
-                    $ServiceNames.Trivy       { "8090" }
+                    $ServiceNames.Meilisearch { "$MeilisearchPort" }
+                    $ServiceNames.Trivy       { "$TrivyPort" }
                     $ServiceNames.Frontend    { "$WebPort" }
                 }
                 $statusColor = if ($s.Status -eq "Running") { "Green" } else { "Yellow" }
@@ -682,10 +721,10 @@ function Invoke-CheckMode {
     Write-Host ""
 
     $components = @(
-        @{ Name = "Backend";     Exe = "bin\artifact-keeper.exe"; Service = $ServiceNames.Backend;     Port = $ApiPort;  HealthUrl = "http://localhost:${ApiPort}/health" }
-        @{ Name = "PostgreSQL";  Exe = "postgresql\pgsql\bin\psql.exe"; Service = $ServiceNames.PostgreSQL; Port = 5432; HealthUrl = $null }
-        @{ Name = "Meilisearch"; Exe = "meilisearch\meilisearch.exe"; Service = $ServiceNames.Meilisearch; Port = 7700; HealthUrl = "http://localhost:7700/health" }
-        @{ Name = "Trivy";       Exe = "trivy\trivy.exe"; Service = $ServiceNames.Trivy; Port = 8090; HealthUrl = $null }
+        @{ Name = "Backend";     Exe = "bin\artifact-keeper.exe";         Service = $ServiceNames.Backend;     Port = $ApiPort;         HealthUrl = "http://localhost:${ApiPort}/health" }
+        @{ Name = "PostgreSQL";  Exe = "postgresql\pgsql\bin\psql.exe"; Service = $ServiceNames.PostgreSQL;  Port = $PostgresPort;    HealthUrl = $null }
+        @{ Name = "Meilisearch"; Exe = "meilisearch\meilisearch.exe";   Service = $ServiceNames.Meilisearch; Port = $MeilisearchPort; HealthUrl = "http://localhost:${MeilisearchPort}/health" }
+        @{ Name = "Trivy";       Exe = "trivy\trivy.exe";               Service = $ServiceNames.Trivy;       Port = $TrivyPort;       HealthUrl = $null }
         @{ Name = "Node.js";     Exe = "nodejs\node.exe"; Service = $null; Port = $null; HealthUrl = $null }
         @{ Name = "Frontend";    Exe = "web\server.js"; Service = $ServiceNames.Frontend; Port = $WebPort; HealthUrl = "http://localhost:${WebPort}" }
     )
@@ -822,6 +861,15 @@ function Invoke-Upgrade {
     $backendExe = Join-Path $InstallDir "bin\artifact-keeper.exe"
     if (Test-Path $backendExe) { Install-Backend | Out-Null }
 
+    # PostgreSQL minor version upgrade: replace binaries, preserve data directory
+    $pgBinDir = Join-Path $InstallDir "postgresql\pgsql\bin"
+    if (Test-Path $pgBinDir) {
+        Write-Log "Upgrading PostgreSQL binaries (data directory is preserved)"
+        $pgDir = Join-Path $InstallDir "postgresql"
+        Remove-Item -Path $pgDir -Recurse -Force -ErrorAction SilentlyContinue
+        Install-PostgreSQL | Out-Null
+    }
+
     $msExe = Join-Path $InstallDir "meilisearch\meilisearch.exe"
     if (Test-Path $msExe) { Install-Meilisearch | Out-Null }
 
@@ -849,7 +897,7 @@ function Show-InteractiveMenu {
     Write-Host "    [4] Trivy vulnerability scanner (optional)" -ForegroundColor White
     Write-Host "    [5] Web frontend (recommended)" -ForegroundColor White
     Write-Host ""
-    Write-Host "    [A] All components" -ForegroundColor Cyan
+    Write-Host "    [A] All core components (excludes Trivy)" -ForegroundColor Cyan
     Write-Host "    [C] Check existing installation" -ForegroundColor Cyan
     Write-Host "    [U] Uninstall" -ForegroundColor Cyan
     Write-Host ""
@@ -914,7 +962,10 @@ Write-Banner
 Initialize-Directories
 
 $resolvedComponents = if ($Components -contains "all") {
-    @("backend", "postgresql", "meilisearch", "trivy", "frontend")
+    $core = @("backend", "postgresql", "meilisearch", "frontend")
+    # Trivy is opt-in: only included when explicitly listed alongside "all"
+    if ($Components -contains "trivy") { $core += "trivy" }
+    $core
 } else {
     $Components
 }
