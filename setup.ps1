@@ -83,7 +83,7 @@ $LogFile = Join-Path $InstallDir "setup.log"
 
 $ServiceNames = @{
     Backend      = "ArtifactKeeper"
-    PostgreSQL   = "ArtifactKeeperPostgreSQL"
+    PostgreSQL   = "ArtifactKeeperPostgreSQLv$PostgresVersion"
     Meilisearch  = "ArtifactKeeperMeilisearch"
     Trivy        = "ArtifactKeeperTrivy"
     Frontend     = "ArtifactKeeperWeb"
@@ -721,10 +721,10 @@ function Invoke-CheckMode {
     Write-Host ""
 
     $components = @(
-        @{ Name = "Backend";     Exe = "bin\artifact-keeper.exe"; Service = $ServiceNames.Backend;     Port = $ApiPort;          HealthUrl = "http://localhost:${ApiPort}/health" }
-        @{ Name = "PostgreSQL";  Exe = "postgresql\pgsql\bin\psql.exe"; Service = $ServiceNames.PostgreSQL; Port = $PostgresPort;    HealthUrl = $null }
-        @{ Name = "Meilisearch"; Exe = "meilisearch\meilisearch.exe"; Service = $ServiceNames.Meilisearch; Port = $MeilisearchPort; HealthUrl = "http://localhost:${MeilisearchPort}/health" }
-        @{ Name = "Trivy";       Exe = "trivy\trivy.exe"; Service = $ServiceNames.Trivy;                   Port = $TrivyPort;       HealthUrl = $null }
+        @{ Name = "Backend";     Exe = "bin\artifact-keeper.exe";         Service = $ServiceNames.Backend;     Port = $ApiPort;         HealthUrl = "http://localhost:${ApiPort}/health" }
+        @{ Name = "PostgreSQL";  Exe = "postgresql\pgsql\bin\psql.exe"; Service = $ServiceNames.PostgreSQL;  Port = $PostgresPort;    HealthUrl = $null }
+        @{ Name = "Meilisearch"; Exe = "meilisearch\meilisearch.exe";   Service = $ServiceNames.Meilisearch; Port = $MeilisearchPort; HealthUrl = "http://localhost:${MeilisearchPort}/health" }
+        @{ Name = "Trivy";       Exe = "trivy\trivy.exe";               Service = $ServiceNames.Trivy;       Port = $TrivyPort;       HealthUrl = $null }
         @{ Name = "Node.js";     Exe = "nodejs\node.exe"; Service = $null; Port = $null; HealthUrl = $null }
         @{ Name = "Frontend";    Exe = "web\server.js"; Service = $ServiceNames.Frontend; Port = $WebPort; HealthUrl = "http://localhost:${WebPort}" }
     )

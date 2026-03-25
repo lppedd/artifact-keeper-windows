@@ -27,6 +27,10 @@
 .PARAMETER TrivyPort
     Trivy port. Defaults to 8090.
 
+.PARAMETER PostgresVersion
+    PostgreSQL major version. Used to match the versioned service name
+    (e.g., ArtifactKeeperPostgreSQLv17). Defaults to "17".
+
 .EXAMPLE
     .\check.ps1
 
@@ -40,7 +44,8 @@ param(
     [int]$WebPort = 3000,
     [int]$PostgresPort = 5432,
     [int]$MeilisearchPort = 7700,
-    [int]$TrivyPort = 8090
+    [int]$TrivyPort = 8090,
+    [string]$PostgresVersion = "17"
 )
 
 Set-StrictMode -Version Latest
@@ -52,7 +57,7 @@ $ErrorActionPreference = "SilentlyContinue"
 
 $ServiceNames = @{
     Backend     = "ArtifactKeeper"
-    PostgreSQL  = "ArtifactKeeperPostgreSQL"
+    PostgreSQL  = "ArtifactKeeperPostgreSQLv$PostgresVersion"
     Meilisearch = "ArtifactKeeperMeilisearch"
     Trivy       = "ArtifactKeeperTrivy"
     Frontend    = "ArtifactKeeperWeb"
