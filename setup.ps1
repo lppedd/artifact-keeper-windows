@@ -604,6 +604,12 @@ function Write-EnvConfig {
 
     $envFile = Join-Path $DataDir "config\.env"
 
+    # If upgrading or rerunning, preserve the existing configuration
+    if (Test-Path $envFile) {
+        Write-Log "Existing .env file found. Skipping configuration generation to preserve secrets." "OK"
+        return
+    }
+
     $dbPassword = if ($script:ResolvedDbPassword) { $script:ResolvedDbPassword } elseif ($DbPassword) { $DbPassword } else { "changeme" }
     $dbUrl = "postgresql://registry:${dbPassword}@localhost:${PostgresPort}/artifact_registry"
 
