@@ -137,8 +137,10 @@ function Invoke-DownloadWithRetry {
             Write-Log "Downloading $Uri (attempt $attempt/$MaxAttempts)"
             # Use TLS 1.2+ for GitHub and other HTTPS sources
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            $oldPref = $ProgressPreference
             $ProgressPreference = "SilentlyContinue"
             Invoke-WebRequest -Uri $Uri -OutFile $OutFile -UseBasicParsing
+            $ProgressPreference = $oldPref
             $hash = (Get-FileHash -Path $OutFile -Algorithm SHA256).Hash
             Write-Log "Downloaded $OutFile (SHA256: $hash)"
             return $true
@@ -159,7 +161,9 @@ function Get-LatestGitHubRelease {
     param([Parameter(Mandatory)][string]$Repo)
     try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $oldPref = $ProgressPreference
         $release = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest"
+        $ProgressPreference = $oldPref
         $tag = $release.tag_name
         Write-Log "Latest release for $Repo : $tag"
         return $tag
@@ -174,8 +178,10 @@ function Get-LatestNodeLtsVersion {
     param([string]$Major = "22")
     try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $oldPref = $ProgressPreference
         $ProgressPreference = "SilentlyContinue"
         $releases = Invoke-RestMethod "https://nodejs.org/dist/index.json"
+        $ProgressPreference = $oldPref
         $latest = $releases | Where-Object { $_.version -match "^v$Major\." -and $_.lts } |
             Select-Object -First 1
         if ($latest) {
