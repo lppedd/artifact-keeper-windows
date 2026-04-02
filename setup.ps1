@@ -356,15 +356,20 @@ function Install-PostgreSQL {
 
     # Initialize the data directory if it does not exist
     $pgdataMarker = Join-Path $pgDataDir "PG_VERSION"
+    $needsDbSetup = $false
+
     if (-not (Test-Path $pgdataMarker)) {
         # Generate a password for the postgres superuser
         $pgSuperPass = New-SecureRandomString -ByteCount 24
+        $script:PgSuperPassword = $pgSuperPass
 
         Write-Log "Running initdb for data directory $pgDataDir"
         $initdb = Join-Path $pgBinDir "initdb.exe"
-        $env:PGPASSWORD = $pgSuperPass
-        $pgSuperPass | & $initdb -D $pgDataDir -U postgres -A md5 --pwfile=- 2>&1 |
-            ForEach-Object { Write-Log $_ }
+
+        $script:PgSuperPassword | & $initdb -D $pgDataDir -U postgres -A md5 --pwfile=- 2>&1 |
+           ForEach-Object { Write-Log $_ }
+
+        $needsDbSetup = $true
     }
 
     # Register as a Windows Service
@@ -378,39 +383,62 @@ function Install-PostgreSQL {
 
     # Start the service so we can create the application database
     Start-Service -Name $ServiceNames.PostgreSQL -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 3
 
-    # Determine database password
-    $dbPass = $DbPassword
-    if (-not $dbPass) {
-        if ($Unattended) {
-            $dbPass = New-SecureRandomString -ByteCount 24
-            Write-Log "Generated random database password (saved to .env)" "WARN"
-        } else {
-            $securePass = Read-Host "Enter password for the 'registry' database user" -AsSecureString
-            $dbPass = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-                [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePass))
+    # Wait for PostgreSQL to become ready
+    $pgIsReady = Join-Path $pgBinDir "pg_isready.exe"
+    Write-Log "Waiting for PostgreSQL to start..."
+    $dbReady = $false
+    for ($i = 0; $i -lt 15; $i++) {
+        & $pgIsReady -h localhost -p $PostgresPort -q
+        if ($LASTEXITCODE -eq 0) {
+            $dbReady = $true
+            break
         }
+        Start-Sleep -Seconds 2
     }
 
-    # Create the application user and database
-    $psql = Join-Path $pgBinDir "psql.exe"
-    $env:PGPASSWORD = $dbPass
+    if (-not $dbReady) {
+        Write-Log "PostgreSQL failed to start after 30 seconds." "ERROR"
+        return $false
+    }
 
-    Write-Log "Creating database user 'registry' and database 'artifact_registry'"
-    & $psql -h localhost -p $PostgresPort -U postgres -c "DO `$`$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'registry') THEN CREATE ROLE registry WITH LOGIN PASSWORD '$dbPass'; END IF; END `$`$;" 2>&1 |
-        ForEach-Object { Write-Log $_ }
-
-    & $psql -h localhost -p $PostgresPort -U postgres -c "SELECT 1 FROM pg_database WHERE datname = 'artifact_registry'" -t 2>&1 |
-        ForEach-Object {
-            if ($_.Trim() -ne "1") {
-                & $psql -h localhost -p $PostgresPort -U postgres -c "CREATE DATABASE artifact_registry OWNER registry;" 2>&1 |
-                    ForEach-Object { Write-Log $_ }
+    # Only create role and database if we just initialized the data directory
+    if ($needsDbSetup -and $script:PgSuperPassword) {
+        $dbPass = $DbPassword
+        if (-not $dbPass) {
+            if ($Unattended) {
+                $dbPass = New-SecureRandomString -ByteCount 24
+                Write-Log "Generated random database password (saved to .env)" "WARN"
+            } else {
+                $securePass = Read-Host "Enter password for the 'registry' database user" -AsSecureString
+                $dbPass = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+                    [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePass))
             }
         }
 
-    # Store password for .env generation
-    $script:ResolvedDbPassword = $dbPass
+        # Prevent SQL syntax errors because of single quotes
+        $escapedDbPass = $dbPass -replace "'", "''"
+
+        # Authenticate as superuser to configure the new user
+        $env:PGPASSWORD = $script:PgSuperPassword
+        $psql = Join-Path $pgBinDir "psql.exe"
+
+        Write-Log "Creating database user 'registry' and database 'artifact_registry'"
+        & $psql -h localhost -p $PostgresPort -U postgres -c "DO `$`$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'registry') THEN CREATE ROLE registry WITH LOGIN PASSWORD '$escapedDbPass'; END IF; END `$`$;" 2>&1 |
+            ForEach-Object { Write-Log $_ }
+
+        # Check if the database exists
+        $dbExists = & $psql -h localhost -p $PostgresPort -U postgres -t -A -c "SELECT 1 FROM pg_database WHERE datname = 'artifact_registry'" 2>&1
+        if ($dbExists.Trim() -ne "1") {
+            & $psql -h localhost -p $PostgresPort -U postgres -c "CREATE DATABASE artifact_registry OWNER registry;" 2>&1 | ForEach-Object { Write-Log $_ }
+        }
+
+        # Store password for .env generation
+        $script:ResolvedDbPassword = $dbPass
+    } else {
+        Write-Log "PostgreSQL data exists. Skipping user/database creation." "INFO"
+    }
+
     Write-Log "PostgreSQL $fullVersion installed" "OK"
     return $true
 }
@@ -949,6 +977,7 @@ function Show-InteractiveMenu {
 # ---------------------------------------------------------------------------
 
 # Initialize script-scope variables for cross-component state
+$script:PgSuperPassword = $null
 $script:ResolvedDbPassword = $null
 $script:MeilisearchMasterKey = $null
 
