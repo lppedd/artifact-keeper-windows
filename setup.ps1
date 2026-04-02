@@ -663,9 +663,9 @@ function Write-EnvConfig {
 function Start-AllServices {
     $order = @(
         $ServiceNames.PostgreSQL
-        $ServiceNames.Backend
         $ServiceNames.Meilisearch
         $ServiceNames.Trivy
+        $ServiceNames.Backend
         $ServiceNames.Frontend
     )
     Write-Host ""
@@ -700,9 +700,9 @@ function Start-AllServices {
 function Stop-AllServices {
     $order = @(
         $ServiceNames.Frontend
+        $ServiceNames.Backend
         $ServiceNames.Trivy
         $ServiceNames.Meilisearch
-        $ServiceNames.Backend
         $ServiceNames.PostgreSQL
     )
     foreach ($svc in $order) {
