@@ -826,15 +826,18 @@ function Invoke-Uninstall {
         $removeData = ($answer -eq "y" -or $answer -eq "Y")
     }
 
-    Write-Log "Removing installation directory: $InstallDir"
-    if ($removeData -or ($DataDir -like "$InstallDir*")) {
-        Remove-Item -Path $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
-    } else {
-        # Remove everything except the data directory
-        Get-ChildItem -Path $InstallDir -Exclude "data" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    if (-not [string]::IsNullOrWhiteSpace($InstallDir) -and $InstallDir.Length -gt 3 -and (Test-Path $InstallDir)) {
+        Write-Log "Removing installation directory: $InstallDir"
+
+        if ($removeData -or ($DataDir -notlike "$InstallDir*")) {
+            Remove-Item -Path $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
+        } else {
+            # Remove everything except the data directory
+            Get-ChildItem -Path $InstallDir -Exclude "data" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
 
-    if ($removeData -and $DataDir -notlike "$InstallDir*") {
+    if ($removeData -and -not [string]::IsNullOrWhiteSpace($DataDir) -and $DataDir.Length -gt 3 -and $DataDir -notlike "$InstallDir*") {
         Write-Log "Removing data directory: $DataDir"
         Remove-Item -Path $DataDir -Recurse -Force -ErrorAction SilentlyContinue
     }
