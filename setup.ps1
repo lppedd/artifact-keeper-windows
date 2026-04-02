@@ -74,6 +74,9 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Use TLS 1.2+ for GitHub and other HTTPS sources
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -135,8 +138,6 @@ function Invoke-DownloadWithRetry {
     for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
         try {
             Write-Log "Downloading $Uri (attempt $attempt/$MaxAttempts)"
-            # Use TLS 1.2+ for GitHub and other HTTPS sources
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             $oldPref = $ProgressPreference
             $ProgressPreference = "SilentlyContinue"
             Invoke-WebRequest -Uri $Uri -OutFile $OutFile -UseBasicParsing
@@ -160,7 +161,6 @@ function Invoke-DownloadWithRetry {
 function Get-LatestGitHubRelease {
     param([Parameter(Mandatory)][string]$Repo)
     try {
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         $oldPref = $ProgressPreference
         $release = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest"
         $ProgressPreference = $oldPref
@@ -177,7 +177,6 @@ function Get-LatestGitHubRelease {
 function Get-LatestNodeLtsVersion {
     param([string]$Major = "22")
     try {
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         $oldPref = $ProgressPreference
         $ProgressPreference = "SilentlyContinue"
         $releases = Invoke-RestMethod "https://nodejs.org/dist/index.json"
