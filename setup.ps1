@@ -107,9 +107,16 @@ function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
     $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $line = "[$ts] [$Level] $Message"
-    if (Test-Path (Split-Path $LogFile -Parent)) {
-        $line | Out-File -Append -FilePath $LogFile -Encoding utf8
+
+    # Ensure log directory exists before writing
+    $logDir = Split-Path $LogFile -Parent
+
+    if (-not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Path $logDir -Force | Out-Null
     }
+
+    $line | Out-File -Append -FilePath $LogFile -Encoding utf8
+
     switch ($Level) {
         "ERROR" { Write-Host $line -ForegroundColor Red }
         "WARN"  { Write-Host $line -ForegroundColor Yellow }
