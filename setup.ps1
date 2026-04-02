@@ -273,7 +273,7 @@ function Register-WinSWService {
         Write-Log "Service $ServiceId already registered, reinstalling"
         & $winswDst stop 2>$null
         & $winswDst uninstall 2>$null
-        Start-Sleep -Seconds 2
+        Start-Sleep -Seconds 4
     }
 
     & $winswDst install
@@ -717,7 +717,7 @@ function Start-AllServices {
             try {
                 if ($s.Status -ne "Running") {
                     Start-Service -Name $svc
-                    Start-Sleep -Seconds 2
+                    Start-Sleep -Seconds 4
                 }
                 $s = Get-Service -Name $svc
                 $port = switch ($svc) {
