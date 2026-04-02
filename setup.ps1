@@ -428,7 +428,7 @@ function Install-Meilisearch {
 
     $xml = @"
 <service>
-  <id>Meilisearch</id>
+  <id>$($ServiceNames.Meilisearch)</id>
   <name>Meilisearch</name>
   <description>Meilisearch search engine for Artifact Keeper</description>
   <executable>$exePath</executable>
@@ -442,7 +442,7 @@ function Install-Meilisearch {
 </service>
 "@
 
-    $registered = Register-WinSWService -ServiceDir $msDir -ServiceId "Meilisearch" -XmlContent $xml
+    $registered = Register-WinSWService -ServiceDir $msDir -ServiceId $ServiceNames.Meilisearch -XmlContent $xml
     if (-not $registered) { return $false }
 
     Write-Log "Meilisearch v$version installed" "OK"
@@ -478,7 +478,7 @@ function Install-Trivy {
 
     $xml = @"
 <service>
-  <id>Trivy</id>
+  <id>$($ServiceNames.Trivy)</id>
   <name>Trivy</name>
   <description>Trivy vulnerability scanner for Artifact Keeper</description>
   <executable>$exePath</executable>
@@ -492,7 +492,7 @@ function Install-Trivy {
 </service>
 "@
 
-    $registered = Register-WinSWService -ServiceDir $trivyDir -ServiceId "Trivy" -XmlContent $xml
+    $registered = Register-WinSWService -ServiceDir $trivyDir -ServiceId $ServiceNames.Trivy -XmlContent $xml
     if (-not $registered) { return $false }
 
     Write-Log "Trivy v$version installed" "OK"
@@ -562,7 +562,7 @@ function Install-Frontend {
 
     $xml = @"
 <service>
-  <id>ArtifactKeeperWeb</id>
+  <id>$($ServiceNames.Frontend)</id>
   <name>Artifact Keeper Web</name>
   <description>Artifact Keeper web frontend (Next.js)</description>
   <executable>$nodeExe</executable>
@@ -580,7 +580,7 @@ function Install-Frontend {
 </service>
 "@
 
-    $registered = Register-WinSWService -ServiceDir $webDir -ServiceId "ArtifactKeeperWeb" -XmlContent $xml
+    $registered = Register-WinSWService -ServiceDir $webDir -ServiceId $ServiceNames.Frontend -XmlContent $xml
     if (-not $registered) { return $false }
 
     Write-Log "Web frontend v$webVersion installed" "OK"
@@ -788,9 +788,9 @@ function Invoke-Uninstall {
 
     # Unregister WinSW-based services
     $winswServices = @(
-        @{ Dir = "meilisearch"; Id = "Meilisearch" }
-        @{ Dir = "trivy"; Id = "Trivy" }
-        @{ Dir = "web"; Id = "ArtifactKeeperWeb" }
+        @{ Dir = "meilisearch"; Id = $ServiceNames.Meilisearch }
+        @{ Dir = "trivy";       Id = $ServiceNames.Trivy }
+        @{ Dir = "web";         Id = $ServiceNames.Frontend }
     )
     foreach ($ws in $winswServices) {
         $svcExe = Join-Path $InstallDir "$($ws.Dir)\$($ws.Id)-service.exe"
