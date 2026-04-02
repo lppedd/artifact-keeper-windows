@@ -169,6 +169,7 @@ function Get-LatestGitHubRelease {
     param([Parameter(Mandatory)][string]$Repo)
     try {
         $oldPref = $ProgressPreference
+        $ProgressPreference = "SilentlyContinue"
         $release = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest"
         $ProgressPreference = $oldPref
         $tag = $release.tag_name
