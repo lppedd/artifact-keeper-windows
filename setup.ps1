@@ -353,7 +353,7 @@ function Install-PostgreSQL {
         Write-Log "Running initdb for data directory $pgDataDir"
         $initdb = Join-Path $pgBinDir "initdb.exe"
         $env:PGPASSWORD = $pgSuperPass
-        & $initdb -D $pgDataDir -U postgres -A md5 --pwfile=- 2>&1 <<< $pgSuperPass |
+        $pgSuperPass | & $initdb -D $pgDataDir -U postgres -A md5 --pwfile=- 2>&1 |
             ForEach-Object { Write-Log $_ }
     }
 
