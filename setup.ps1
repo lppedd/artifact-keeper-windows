@@ -122,12 +122,6 @@ function Write-Banner {
     Write-Host ""
 }
 
-function Write-Status {
-    param([string]$Label, [string]$Value, [string]$Color = "White")
-    Write-Host "  $Label" -NoNewline -ForegroundColor Gray
-    Write-Host "  $Value" -ForegroundColor $Color
-}
-
 # ---------------------------------------------------------------------------
 # Download helpers
 # ---------------------------------------------------------------------------
