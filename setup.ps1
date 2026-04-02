@@ -527,10 +527,10 @@ function Install-Frontend {
         $tempDir = Join-Path $InstallDir "node-temp"
         Expand-Archive -Path $nodeZip -DestinationPath $tempDir -Force
         # The ZIP contains a top-level folder like node-v22.16.0-win-x64
-        $innerDir = Get-ChildItem -Path $tempDir -Directory | Select-Object -First 1
-        if ($innerDir) {
+        $innerDirs = Get-ChildItem -Path $tempDir -Directory
+        if ($innerDirs.Count -gt 0) {
             if (Test-Path $nodeDir) { Remove-Item $nodeDir -Recurse -Force }
-            Move-Item -Path $innerDir.FullName -Destination $nodeDir
+            Move-Item -Path $innerDirs[0].FullName -Destination $nodeDir
         }
         Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
         Remove-Item $nodeZip -Force
