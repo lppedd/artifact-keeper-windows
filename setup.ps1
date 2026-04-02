@@ -196,6 +196,7 @@ function New-SecureRandomString {
     $bytes = New-Object byte[] $ByteCount
     $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
     $rng.GetBytes($bytes)
+    $rng.Dispose()
     return [Convert]::ToBase64String($bytes)
 }
 
