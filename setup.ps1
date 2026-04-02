@@ -301,7 +301,10 @@ function Install-Backend {
     # Set the environment variable so the backend finds its config
     $envFilePath = Join-Path $DataDir "config\.env"
     [Environment]::SetEnvironmentVariable("AK_ENV_FILE", $envFilePath, "Machine")
-    Write-Log "Set AK_ENV_FILE = $envFilePath (Machine scope)"
+    # Set the environment variable for current script process as well
+    $env:AK_ENV_FILE = $envFilePath
+
+    Write-Log "Set AK_ENV_FILE = $envFilePath (Machine & Process scope)"
 
     # Register as Windows Service using the backend's own --install flag
     Write-Log "Registering ArtifactKeeper service via --install"
